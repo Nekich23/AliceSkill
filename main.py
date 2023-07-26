@@ -1,14 +1,14 @@
 from flask import Flask, request
-import requests
 from pyowm import OWM
 from translate import Translator
-
 
 translator = Translator(from_lang='en', to_lang='ru')
 
 app = Flask(__name__)
 
-owm = OWM('1319c8dd2276b010e23222a923fa6c24')
+owm = OWM('a1190779fb61715499b46fb3a68166b4')
+APPID = 'a1190779fb61715499b46fb3a68166b4'
+URL_BASE = 'https://api.openweathermap.org/data/2.5/'
 mgr = owm.weather_manager()
 
 hi_response = [
@@ -22,26 +22,21 @@ weather_response = [
     'инфо о погоде'
 
 ]
-city_response = [
-    'запомнить город',
-    'город',
-    'сохранить город'
+clothes_response = [
+    'дай рекомендацию по одежде',
+    'рекомендации по одежде',
+    'рекомендация по одежде'
 ]
-savedCity_response = [
-    'инфо в сохранённом',
-    'погода в городе',
-    'погода в сохранённом городе'
+tommorow_response = [
+    'прогноз погоды'
 ]
 
 s = 0
-savedCity = ''
-saving = savedCity
+
 
 @app.route('/alice', methods=['POST'])
 def resp():
     global s
-    global savedCity
-    global saving
     text = request.json.get('request', {}).get('command')
     response_text = f'Вы назвали {text}'
 
@@ -53,13 +48,13 @@ def resp():
         s = 1
         response_text = 'Введи название города: '
 
-    elif text.lower() in city_response and s == 0:
+    elif text.lower() in clothes_response and s == 0:
         s = 2
         response_text = 'Введи название города: '
 
-    elif text.lower() in savedCity_response and s == 0:
+    elif text.lower() in tommorow_response and s == 0:
         s = 3
-        response_text = 'Сохранённый город: ' + savedCity
+        response_text = 'Введи название города: '
 
     # логика основных функций
     elif s == 1:
@@ -71,7 +66,7 @@ def resp():
         temperature = round(celsius)
         temperature_feels = celsius - 1
         answer = translator.translate(w.detailed_status) + '\n'
-        answer += 'Сейчас в городе ' + str(city) + ' ' +  str(temperature) + '°C\n'
+        answer += 'Сейчас в городе ' + str(city) + ' ' + str(temperature) + '°C\n'
         answer += 'Ощущается как ' + str(temperature_feels) + '°C\n'
         answer += 'Скорость ветра ' + str(w.clouds) + ' м/c\n'
         answer += 'Тумманность ' + str(w.humidity) + '%'
@@ -80,27 +75,67 @@ def resp():
         s = 0
 
     elif s == 2:
-        saving = str(request.json.get('request', {}).get('command'))
-        if saving.lower() != '' or ' ' or 0 or '0':
-            savedCity = saving
-            response_text = 'Сохранённый город: ' + savedCity
-        else:
-            response_text = 'Город не указан!'
+        city = str(request.json.get('request', {}).get('command'))
+        observation = mgr.weather_at_place(city)
+        w = observation.weather
 
-    elif s == 3:
-        city = savedCity
+        celsius = round(w.temperature('celsius')['temp'])
+        temperature = round(celsius)
+        temperature_feels = celsius - 1
+        answer = translator.translate(w.detailed_status) + '\n'
+        answer += 'Сейчас в городе ' + str(city) + ' ' + str(temperature) + '°C\n'
+        answer += 'Ощущается как ' + str(temperature_feels) + '°C\n'
+        answer += 'Скорость ветра ' + str(w.wind()['speed']) + ' м/c\n'
+        answer += 'Тумманность ' + str(w.humidity) + '%\n\n'
 
-        url = 'https://api.openweathermap.org/data/2.5/weather?q=' + city + '&units=metric&lang=ru&appid=79d1ca96933b0328e1c7e3e7a26cb347'
-
-        weather_data = requests.get(url).json()
-
-        temperature = round(weather_data['main']['temp'])
-        temperature_feels = round(weather_data['main']['feels_like'])
-        answer = weather_data['weather'][0]['description'] + '\n'
-        answer += 'Сейчас в городе' + str(city) + ' ' + str(temperature) + '°C\n'
-        answer += 'Ощущается как' + ' ' + str(temperature_feels) + '°C\n'
+        if temperature_feels >= 15 and int(w.wind()['speed']) >= 40:
+            answer += 'Ветренно! 🍃 Советую надеть:' \
+                      '\n-Ветровка 🧥' \
+                      '\n-Кепка с капюшоном(шапка) 🧢' \
+                      '\n-Джинсы 👖' \
+                      '\n-Кросовки 👞'
+        elif temperature_feels >= 15 and int(w.wind()['speed']) <= 40:
+            answer += 'Очень оптимальная погода! 🌞 Советую надеть: ' \
+                      '\n-Кофта 👘' \
+                      '\n-Шорты 🩳' \
+                      '\n-Лёгкие кросовки 👞'
+        elif temperature_feels >= 25:
+            answer += 'Вот это жарко! ☀☀☀ Советую надеть: ' \
+                      '\n-Майка(футболка) 👕' \
+                      '\n-Шорты 🩳' \
+                      '\n-Кросовки 👞'
+        elif 'дождь' in translator.translate(w.detailed_status):
+            answer += 'На улице дождь! 🌧⛈ Советую надеть: ' \
+                      '\n-Пальто 🧥' \
+                      '\n-Кепка с капюшоном 🧢' \
+                      '\n-Ботинки для дождя 👞' \
+                      '\n-Тёплые штаны 👖'
+        elif temperature_feels <= 15:
+            answer += 'Холодно! ❄ Советую надеть: ' \
+                      '\n-Куртка(теплая курта) 🧥' \
+                      '\n-Шапка 👲' \
+                      '\n-Ботинки 👞' \
+                      '\n-Тёплые штаны 👖'
+        s = 0
 
         response_text = answer
+
+    elif s == 3:
+        city = str(request.json.get('request', {}).get('command'))
+
+        monitoring = owm.weather_manager().weather_at_place(city)
+        weather = monitoring.weather
+        status = weather.detailed_status
+        temperaturestatus = weather.temperature('celsius')['temp']
+
+        response_text = 'В ближайшее время в городе ' + str(city) + ' ожидается: ' + str(translator.translate(status))
+        response_text += '\nТемпература: ' + str(temperaturestatus)
+        response_text += '\nСкорость ветра ожидается: ' + str(weather.wind()['speed']) + ' м/с'
+        
+        if temperaturestatus >= 15:
+            response_text += '\n\nБудет тепло! 😎☀'
+        elif temperaturestatus <= 15:
+            response_text += '\n\nБудет холодно! 🥶❄'
 
     response = {
         'response': {
@@ -116,11 +151,11 @@ def resp():
                     'hide': True
                 },
                 {
-                    'title': 'Сохранить город 🏙',
+                    'title': 'Рекомендации по одежде 🧥',
                     'hide': True
                 },
                 {
-                    'title': 'Погода в сохранённом городе 🌆',
+                    'title': 'Прогноз погоды 📅',
                     'hide': True
                 }]
         },
@@ -129,4 +164,4 @@ def resp():
     return response
 
 
-app.run('0.0.0.0', port=4100, debug=True)
+app.run('0.0.0.0', port=4150, debug=True)
