@@ -7,8 +7,6 @@ translator = Translator(from_lang='en', to_lang='ru')
 app = Flask(__name__)
 
 owm = OWM('a1190779fb61715499b46fb3a68166b4')
-APPID = 'a1190779fb61715499b46fb3a68166b4'
-URL_BASE = 'https://api.openweathermap.org/data/2.5/'
 mgr = owm.weather_manager()
 
 hi_response = [
